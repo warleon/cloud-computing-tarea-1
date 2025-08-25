@@ -1,0 +1,13 @@
+{
+  "name": "ecs-fargate-crud-cdk",
+  "version": "0.1.0",
+  "bin": {
+    "ecs-fargate-crud-cdk": "bin/app.ts"
+  },
+  "devDependencies": {
+    "aws-cdk-lib": "^2.152.0",
+    "constructs": "^10.3.0",
+    "typescript": "^5.4.0",
+    "ts-node": "^10.9.2"
+  }
+}
