@@ -4,7 +4,7 @@ import sqlite3
 from typing import List
 
 
-DB_PATH = "/data/app.db"  # Persistencia en volumen efímero del task
+DB_PATH = "./db.sqlite"  # Persistencia en volumen efímero del task
 
 
 app = FastAPI()
