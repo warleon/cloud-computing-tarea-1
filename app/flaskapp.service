@@ -3,11 +3,13 @@ Description=Flask App Service
 After=network.target
 
 [Service]
-User=root
-WorkingDirectory=/root/cloud-computing-tarea-1/app
-ExecStart=/root/cloud-computing-tarea-1/app/start_app.sh
+User=flaskuser
+Group=flaskuser
+WorkingDirectory=/home/cloud-computing-tarea-1/app
+ExecStart=/home/cloud-computing-tarea-1/app/start_app.sh
 Restart=always
 Environment="PATH=/usr/bin"
+
 
 [Install]
 WantedBy=multi-user.target
