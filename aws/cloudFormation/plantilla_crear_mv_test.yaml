@@ -66,4 +66,4 @@ Outputs:
     Value: !GetAtt EC2Instance.PublicIp
   API:
     Description: API URL
-    Value: http://${EC2Instance.PublicIp}:8000
+    Value: http://{{EC2Instance.PublicIp}}:8000
