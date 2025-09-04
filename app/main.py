@@ -4,7 +4,7 @@ import sqlite3
 from typing import List
 
 
-DB_PATH = "/data/app.db" # Persistencia en volumen efímero del task
+DB_PATH = "/data/app.db"  # Persistencia en volumen efímero del task
 
 
 app = FastAPI()
@@ -19,7 +19,9 @@ class Item(BaseModel):
 # Inicializar tabla
 conn = sqlite3.connect(DB_PATH)
 c = conn.cursor()
-c.execute("CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT)")
+c.execute(
+    "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT)"
+)
 conn.commit()
 conn.close()
 
@@ -42,7 +44,10 @@ def list_items():
 def create_item(item: Item):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("INSERT INTO items (name, description) VALUES (?, ?)", (item.name, item.description))
+    cur.execute(
+        "INSERT INTO items (name, description) VALUES (?, ?)",
+        (item.name, item.description),
+    )
     conn.commit()
     item_id = cur.lastrowid
     conn.close()
@@ -53,7 +58,9 @@ def create_item(item: Item):
 def get_item(item_id: int):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    row = conn.execute("SELECT id, name, description FROM items WHERE id=?", (item_id,)).fetchone()
+    row = conn.execute(
+        "SELECT id, name, description FROM items WHERE id=?", (item_id,)
+    ).fetchone()
     conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="Not found")
@@ -64,7 +71,10 @@ def get_item(item_id: int):
 def update_item(item_id: int, item: Item):
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("UPDATE items SET name=?, description=? WHERE id=?", (item.name, item.description, item_id))
+    cur.execute(
+        "UPDATE items SET name=?, description=? WHERE id=?",
+        (item.name, item.description, item_id),
+    )
     conn.commit()
     if cur.rowcount == 0:
         conn.close()
@@ -81,3 +91,7 @@ def delete_item(item_id: int):
     conn.commit()
     conn.close()
     return
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)

@@ -27,6 +27,13 @@ Resources:
         - DeviceName: /dev/sda1
           Ebs:
             VolumeSize: "20"
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          # Se ejecuta con usuario root por lo que no necesita sudo
+          cd /var/www/html/
+          git clone https://github.com/warleon/cloud-computing-web-simple.git
+          ls -l
 
   InstanceSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
@@ -53,3 +60,6 @@ Outputs:
   InstancePublicIP:
     Description: "IP publica de la instancia"
     Value: !GetAtt EC2Instance.PublicIp
+  API:
+    Description: API URL
+    Value: http://${EC2Instance.PublicIp}:8000
