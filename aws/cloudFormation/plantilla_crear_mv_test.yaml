@@ -31,8 +31,12 @@ Resources:
         Fn::Base64: |
           #!/bin/bash
           # Se ejecuta con usuario root por lo que no necesita sudo
-          cd ~
+          # Crear usuario sin login para la app
+          useradd -m -r -s /bin/false flaskuser
+          # Clonar la app
+          cd /home/flaskuser
           git clone https://github.com/warleon/cloud-computing-tarea-1.git
+          chown -R flaskuser:flaskuser cloud-computing-tarea-1
           cd cloud-computing-tarea-1/app
           chmod +x start_app.sh
           cp flaskapp.service /etc/systemd/system/flaskapp.service
