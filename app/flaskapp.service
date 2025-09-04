@@ -5,8 +5,8 @@ After=network.target
 [Service]
 User=flaskuser
 Group=flaskuser
-WorkingDirectory=/home/cloud-computing-tarea-1/app
-ExecStart=/home/cloud-computing-tarea-1/app/start_app.sh
+WorkingDirectory=/home/flaskuser/cloud-computing-tarea-1/app
+ExecStart=/home/flaskuser/cloud-computing-tarea-1/app/start_app.sh
 Restart=always
 Environment="PATH=/usr/bin"
 
