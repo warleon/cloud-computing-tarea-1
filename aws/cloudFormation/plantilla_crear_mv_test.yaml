@@ -31,9 +31,13 @@ Resources:
         Fn::Base64: |
           #!/bin/bash
           # Se ejecuta con usuario root por lo que no necesita sudo
-          cd /var/www/html/
-          git clone https://github.com/warleon/cloud-computing-web-simple.git
-          ls -l
+          cd ~
+          git clone https://github.com/warleon/cloud-computing-tarea-1.git
+          cd cloud-computing-tarea-1/app
+          chmod +x start_app.sh
+          cp flaskapp.service /etc/systemd/system/flaskapp.service
+          systemctl enable flaskapp.service
+          systemctl start flaskapp.service
 
   InstanceSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
