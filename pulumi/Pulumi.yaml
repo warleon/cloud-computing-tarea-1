@@ -1,0 +1,8 @@
+name: cloud-computing-tarea-1-pulumi
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: IaC Pulumi para ECS Fargate + ALB usando Dockerfile del repo (app en 8000)
+config:
+  aws:region: us-east-1
