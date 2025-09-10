@@ -19,9 +19,10 @@ locals {
 
 provider "aws" {
   region = var.region
-  assume_role {
-    role_arn = local.lab_role_arn
-  }
+  # Bloque assume_role comentado temporalmente para ejecutar Terraform
+  # assume_role {
+  #   role_arn = local.lab_role_arn
+  # }
 }
 
 // Repositorio ECR para la imagen del API. Debe hacer docker build & push desde su MV/estación.
