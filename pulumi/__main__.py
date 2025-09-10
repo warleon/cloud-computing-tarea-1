@@ -62,19 +62,40 @@ else:
 cluster = aws.ecs.Cluster("cluster", name="crudapi-pulumi-cluster")
 log_group = aws.cloudwatch.LogGroup("log", name="/ecs/crudapi-pulumi", retention_in_days=7)
 
-container_def = pulumi.Output.all(IMAGE_URI).apply(lambda vals: json.dumps([{
+image_uri_out   = pulumi.Output.from_input(IMAGE_URI)     # puede venir como str o Output[str]
+log_name_out    = log_group.name                          # Output[str]
+container_port  = pulumi.Output.from_input(CONTAINER_PORT)
+health_path_out = pulumi.Output.from_input(HEALTH_PATH)
+
+container_def = pulumi.Output.all(
+    image_uri=image_uri_out,
+    log_group=log_name_out,
+    cport=container_port,
+    hpath=health_path_out,
+).apply(lambda a: json.dumps([{
     "name": "app",
-    "image": vals[0],
-    "portMappings": [{"containerPort": CONTAINER_PORT, "protocol":"tcp"}],
+    "image": a["image_uri"],
+    "essential": True,
+    "portMappings": [{
+        "containerPort": int(a["cport"]),
+        "protocol": "tcp"
+    }],
     "logConfiguration": {
-        "logDriver":"awslogs",
+        "logDriver": "awslogs",
         "options": {
-            "awslogs-group": log_group.name,
+            "awslogs-group": a["log_group"],
             "awslogs-region": REGION,
-            "awslogs-stream-prefix":"app"
+            "awslogs-stream-prefix": "app"
         }
+    },
+    # (opcional pero recomendado) healthcheck del contenedor
+    "healthCheck": {
+        "command": ["CMD-SHELL", f"curl -f http://localhost:{int(a['cport'])}{a['hpath']} || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3
     }
-}]))
+}], separators=(',', ':')))
 
 task = aws.ecs.TaskDefinition("task",
     family="crudapi-pulumi-task",
