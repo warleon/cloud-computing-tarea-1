@@ -10,7 +10,7 @@ variable "region" {
 variable "account_id" {
   description = "Su ID de cuenta AWS (se usará para construir el ARN del LabRole)"
   type        = string
-  default     = "478701513931"
+  default     = "013700640070"
 }
 
 locals {
