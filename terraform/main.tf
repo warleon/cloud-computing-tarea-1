@@ -13,6 +13,21 @@ variable "account_id" {
   default     = "013700640070"
 }
 
+# Control para creación de IAM role de ejecución de tareas. Si tu principal
+# no tiene permisos iam:CreateRole, pon este valor a false y proporciona
+# el ARN del role existente en `existing_task_exec_role_arn`.
+variable "create_task_exec_role" {
+  description = "Si true, Terraform crea el IAM role para ECS task execution"
+  type        = bool
+  default     = true
+}
+
+variable "existing_task_exec_role_arn" {
+  description = "ARN del role de ejecución de tareas existente a usar cuando create_task_exec_role=false"
+  type        = string
+  default     = ""
+}
+
 locals {
   lab_role_arn = "arn:aws:iam::${var.account_id}:role/LabRole"
 }
@@ -103,15 +118,17 @@ resource "aws_ecs_cluster" "this" { name = "crud-cluster" }
 
 # IAM roles
 resource "aws_iam_role" "task_exec" {
-name = "crud-task-exec"
-assume_role_policy = jsonencode({
-Version = "2012-10-17",
-Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }]
-})
+  count = var.create_task_exec_role ? 1 : 0
+  name = "crud-task-exec"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }]
+  })
 }
 resource "aws_iam_role_policy_attachment" "exec_policy" {
-role = aws_iam_role.task_exec.name
-policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+  count = var.create_task_exec_role ? 1 : 0
+  role = aws_iam_role.task_exec[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
 
@@ -152,8 +169,8 @@ resource "aws_ecs_task_definition" "task" {
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
   memory                   = "512"
-  execution_role_arn       = aws_iam_role.task_exec.arn
-  task_role_arn            = aws_iam_role.task_exec.arn
+  execution_role_arn       = var.create_task_exec_role ? aws_iam_role.task_exec[0].arn : var.existing_task_exec_role_arn
+  task_role_arn            = var.create_task_exec_role ? aws_iam_role.task_exec[0].arn : var.existing_task_exec_role_arn
 
   volume {
     name = "data"
