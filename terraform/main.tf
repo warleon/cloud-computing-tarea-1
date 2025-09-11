@@ -1,85 +1,55 @@
 terraform {
-}
-
-variable "region" {
-  description = "AWS region"
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "account_id" {
-  description = "Su ID de cuenta AWS (se usará para construir el ARN del LabRole)"
-  type        = string
-  default     = "013700640070"
-}
-
-# Control para creación de IAM role de ejecución de tareas. Si tu principal
-# no tiene permisos iam:CreateRole, pon este valor a false y proporciona
-# el ARN del role existente en `existing_task_exec_role_arn`.
-variable "create_task_exec_role" {
-  description = "Si true, Terraform crea el IAM role para ECS task execution"
-  type        = bool
-  default     = true
-}
-
-variable "existing_task_exec_role_arn" {
-  description = "ARN del role de ejecución de tareas existente a usar cuando create_task_exec_role=false"
-  type        = string
-  default     = ""
-}
-
-locals {
-  lab_role_arn = "arn:aws:iam::${var.account_id}:role/LabRole"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 4.0"
+    }
+  }
+  required_version = ">= 1.0.0"
 }
 
 provider "aws" {
-  region = var.region
-  # Bloque assume_role comentado temporalmente para ejecutar Terraform
-  # assume_role {
-  #   role_arn = local.lab_role_arn
-  # }
+  region = var.aws_region
 }
 
-// Repositorio ECR para la imagen del API. Debe hacer docker build & push desde su MV/estación.
-resource "aws_ecr_repository" "api" {
-  name                 = "crud-api-repo"
-  image_tag_mutability = "MUTABLE"
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
 }
 
-
-# VPC simplificada con 2 subnets públicas
-resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
+variable "image_url" {
+  type        = string
+  description = "URI de la imagen en ECR, p.ej: <ACCOUNT>.dkr.ecr.us-east-1.amazonaws.com/api-crud:latest"
 }
 
-resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.main.id
-}
-resource "aws_subnet" "public_a" {
-vpc_id = aws_vpc.main.id
-cidr_block = "10.0.1.0/24"
-availability_zone = data.aws_availability_zones.available.names[0]
-map_public_ip_on_launch = true
-}
-resource "aws_subnet" "public_b" {
-vpc_id = aws_vpc.main.id
-cidr_block = "10.0.2.0/24"
-availability_zone = data.aws_availability_zones.available.names[1]
-map_public_ip_on_launch = true
+variable "lab_role_arn" {
+  type        = string
+  description = "ARN del role LabRole a usar en TaskRole/ServiceRole"
 }
 
+data "aws_vpc" "default" {
+  default = true
+}
 
-data "aws_availability_zones" "available" {}
+data "aws_subnet_ids" "default" {
+  vpc_id = data.aws_vpc.default.id
+}
 
-
-# SGs
-resource "aws_security_group" "alb" {
-  name   = "alb-sg"
-  vpc_id = aws_vpc.main.id
+resource "aws_security_group" "ecs_sg" {
+  name        = "ecs-api-sg"
+  description = "Allow HTTP 8000 and ephemeral and SSH (for debug)"
+  vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    from_port   = 80
-    to_port     = 80
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -92,150 +62,155 @@ resource "aws_security_group" "alb" {
   }
 }
 
-resource "aws_security_group" "svc" {
-  name   = "svc-sg"
-  vpc_id = aws_vpc.main.id
+resource "aws_ecr_repository" "api_repo" {
+  name = "api-crud"
+}
 
-  ingress {
-    from_port       = 8000
-    to_port         = 8000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
+resource "aws_cloudwatch_log_group" "ecs_log_group" {
+  name              = "/ecs/api-crud"
+  retention_in_days = 7
+}
 
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+resource "aws_iam_role" "ecs_task_execution_role" {
+  name = "ecsTaskExecutionRole-custom"
+
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
+}
+
+data "aws_iam_policy_document" "ecs_task_assume_role" {
+  statement {
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+    actions = ["sts:AssumeRole"]
   }
 }
 
-
-# ECS Cluster
-resource "aws_ecs_cluster" "this" { name = "crud-cluster" }
-
-
-# IAM roles
-resource "aws_iam_role" "task_exec" {
-  count = var.create_task_exec_role ? 1 : 0
-  name = "crud-task-exec"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{ Effect = "Allow", Principal = { Service = "ecs-tasks.amazonaws.com" }, Action = "sts:AssumeRole" }]
-  })
-}
-resource "aws_iam_role_policy_attachment" "exec_policy" {
-  count = var.create_task_exec_role ? 1 : 0
-  role = aws_iam_role.task_exec[0].name
+resource "aws_iam_role_policy_attachment" "execution_attach" {
+  role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-
-# ALB
-resource "aws_lb" "this" {
-name = "crud-alb"
-internal = false
-load_balancer_type = "application"
-security_groups = [aws_security_group.alb.id]
-subnets = [aws_subnet.public_a.id, aws_subnet.public_b.id]
-}
-resource "aws_lb_target_group" "tg" {
-  name    = "crud-tg"
-  port    = 8000
-  protocol = "HTTP"
-  vpc_id  = aws_vpc.main.id
-
-  health_check {
-    path    = "/health"
-    matcher = "200"
-  }
-}
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.this.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.tg.arn
-  }
+resource "aws_ecs_cluster" "api_cluster" {
+  name = "api-cluster"
 }
 
-# Task Definition Fargate
-resource "aws_ecs_task_definition" "task" {
-  family                   = "crud-task"
+resource "aws_ecs_task_definition" "api_task" {
+  family                   = "api-crud-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = "256"
   memory                   = "512"
-  execution_role_arn       = var.create_task_exec_role ? aws_iam_role.task_exec[0].arn : var.existing_task_exec_role_arn
-  task_role_arn            = var.create_task_exec_role ? aws_iam_role.task_exec[0].arn : var.existing_task_exec_role_arn
-
-  volume {
-    name = "data"
-  }
+  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+  task_role_arn            = var.lab_role_arn
 
   container_definitions = jsonencode([
     {
-      name      = "api"
-      image     = "${aws_ecr_repository.api.repository_url}:latest"
+      name      = "api-crud"
+      image     = var.image_url
       essential = true
-
       portMappings = [
-        {
-          containerPort = 8000
-          hostPort      = 8000
-          protocol      = "tcp"
-        }
+        { containerPort = 8000, hostPort = 8000, protocol = "tcp" }
       ]
-
-      mountPoints = [
-        {
-          sourceVolume  = "data"
-          containerPath = "/app/data"
-          readOnly      = false
-        }
-      ]
-
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = "/ecs/crud-task"
-          awslogs-region        = var.region
-          awslogs-stream-prefix = "ecs"
+          awslogs-group         = aws_cloudwatch_log_group.ecs_log_group.name
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "api"
         }
       }
     }
   ])
 }
 
-
-# ECS Service para ejecutar la task en Fargate y conectarla al ALB
-resource "aws_ecs_service" "svc" {
-  name            = "crud-service"
-  cluster         = aws_ecs_cluster.this.id
-  task_definition = aws_ecs_task_definition.task.arn
+resource "aws_ecs_service" "api_service" {
+  name            = "api-crud-service"
+  cluster         = aws_ecs_cluster.api_cluster.id
+  task_definition = aws_ecs_task_definition.api_task.arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets         = [aws_subnet.public_a.id, aws_subnet.public_b.id]
-    security_groups = [aws_security_group.svc.id]
+    subnets         = data.aws_subnet_ids.default.ids
+    security_groups = [aws_security_group.ecs_sg.id]
     assign_public_ip = true
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.tg.arn
-    container_name   = "api"
-    container_port   = 8000
-  }
-
-  depends_on = [aws_lb_listener.http]
+  depends_on = [aws_iam_role_policy_attachment.execution_attach]
 }
 
+output "ecr_repository_url" {
+  value = aws_ecr_repository.api_repo.repository_url
+}
 
-output "alb_dns" {
-  description = "DNS name del Application Load Balancer"
-  value       = aws_lb.this.dns_name
+output "ecs_cluster_name" {
+  value = aws_ecs_cluster.api_cluster.name
+}
+
+output "ecs_service_name" {
+  value = aws_ecs_service.api_service.name
+}
+resource "aws_security_group" "api_sg" {
+  name        = "api-security-group2"
+  description = "Security group for API EC2 instance"
+
+  # Permitir tráfico HTTP en puerto 8000
+  ingress {
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Permitir SSH
+  ingress {
+  from_port   = 22
+  to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Permitir todo el tráfico saliente
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "API-SecurityGroup"
+  }
+}
+
+resource "aws_instance" "mi_ec2" {
+  ami           = "ami-004544147dc19dc61"
+  instance_type = "t2.micro"
+  key_name      = "vockey"   # ajusta a tu keypair
+  # subnet_id se asigna automáticamente a la subnet por defecto
+  vpc_security_group_ids = [aws_security_group.api_sg.id]
+
+  user_data = <<-EOF
+              #!/bin/bash
+              sudo yum update -y
+              sudo yum install -y git python3 python3-pip
+
+              # Clonar repo
+              cd /home/ec2-user
+              git clone https://github.com/warleon/cloud-computing-tarea-1.git
+              cd cloud-computing-tarea-1/app
+
+              # Instalar dependencias
+              pip3 install -r requirements.txt
+
+              # Levantar API FastAPI con Uvicorn en puerto 8000
+              nohup uvicorn main:app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
+              EOF
+
+  tags = {
+    Name = "API-Python-EC2"
+  }
 }
